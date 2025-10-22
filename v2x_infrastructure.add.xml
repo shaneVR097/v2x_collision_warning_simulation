@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<additional>
+    <!-- RSUs at traffic light junctions -->
+    <poi id="rsu_A1" type="rsu" color="0,1,0" x="200" y="200" width="8"/>
+    <poi id="rsu_B0" type="rsu" color="0,1,0" x="200" y="400" width="8"/>
+    <poi id="rsu_B1" type="rsu" color="0,1,0" x="400" y="400" width="8"/>
+    <poi id="rsu_B2" type="rsu" color="0,1,0" x="600" y="400" width="8"/>
+    <poi id="rsu_C1" type="rsu" color="0,1,0" x="400" y="600" width="8"/>
+    
+    <!-- Simple detectors without file attribute -->
+    <inductionLoop id="detector_A0A1" lane="A0A1_0" pos="30" freq="1"/>
+    <inductionLoop id="detector_A1B1" lane="A1B1_0" pos="30" freq="1"/>
+    <inductionLoop id="detector_B1C1" lane="B1C1_0" pos="30" freq="1"/>
+    <inductionLoop id="detector_C1B1" lane="C1B1_0" pos="30" freq="1"/>
+    
+    <!-- Variable Speed Signs -->
+    <variableSpeedSign id="vms_A0A1" lanes="A0A1_0 A0A1_1">
+        <step time="0" speed="13.89"/>
+    </variableSpeedSign>
+    
+    <variableSpeedSign id="vms_B1C1" lanes="B1C1_0 B1C1_1">
+        <step time="0" speed="13.89"/>
+    </variableSpeedSign>
+</additional>

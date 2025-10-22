@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <input>
+        <net-file value="network.net.xml"/>
+        <route-files value="routes.rou.xml"/>
+        <additional-files value="v2x_infrastructure.add.xml"/>
+    </input>
+    
+    <time>
+        <begin value="0"/>
+        <end value="1000"/>
+    </time>
+    
+    <processing>
+        <step-length value="0.2"/>
+        <lateral-resolution value="0.1"/>
+    </processing>
+    
+    <report>
+        <no-step-log value="true"/>
+        <verbose value="true"/>
+    </report>
+    
+    <gui_only>
+        <start value="true"/>
+        <delay value="200"/>
+    </gui_only>
+    
+    <output>
+        <fcd-output value="v2x_traces.xml"/>
+        <emission-output value="emissions.xml"/>
+    </output>
+</configuration>

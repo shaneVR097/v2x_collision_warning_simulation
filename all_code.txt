@@ -1,0 +1,741 @@
+# ======= File: all_code.txt =======
+
+
+# ======= File: controller.py =======
+import os
+import sys
+import matplotlib.pyplot as plt
+import matplotlib.animation as animation
+from matplotlib.widgets import Button
+import numpy as np
+
+# Set SUMO_HOME explicitly
+os.environ['SUMO_HOME'] = r'C:\Program Files (x86)\Eclipse\Sumo'
+
+# Add SUMO tools to path
+if 'SUMO_HOME' in os.environ:
+    tools = os.path.join(os.environ['SUMO_HOME'], 'tools')
+    sys.path.append(tools)
+else:
+    sys.exit("Please declare environment variable 'SUMO_HOME'")
+
+import traci
+
+class SUMOSimulationController:
+    def __init__(self):
+        self.simulation_running = False
+        self.step = 0
+        self.vehicle_data = {}
+        self.simulation_data = []
+        self.setup_plots()
+        
+    def setup_plots(self):
+        self.fig = plt.figure(figsize=(15, 10))
+        self.fig.suptitle('SUMO Simulation - Live Data Visualization', fontsize=16, fontweight='bold')
+        
+        # 1. Vehicle speed distribution
+        self.ax1 = plt.subplot2grid((2, 3), (0, 0))
+        self.ax1.set_title('Vehicle Speed Distribution', fontsize=12, fontweight='bold')
+        self.ax1.set_xlabel('Speed (m/s)')
+        self.ax1.set_ylabel('Frequency')
+        self.ax1.grid(True, alpha=0.3)
+        
+        # 2. Traffic density over time
+        self.ax2 = plt.subplot2grid((2, 3), (0, 1))
+        self.ax2.set_title('Traffic Density Over Time', fontsize=12, fontweight='bold')
+        self.ax2.set_xlabel('Time (s)')
+        self.ax2.set_ylabel('Number of Vehicles')
+        self.ax2.grid(True, alpha=0.3)
+        
+        # 3. Vehicle positions
+        self.ax3 = plt.subplot2grid((2, 3), (0, 2))
+        self.ax3.set_title('Live Vehicle Positions', fontsize=12, fontweight='bold')
+        self.ax3.set_xlabel('X Position')
+        self.ax3.set_ylabel('Y Position')
+        self.ax3.grid(True, alpha=0.3)
+        
+        # 4. CO2 emissions
+        self.ax4 = plt.subplot2grid((2, 3), (1, 0))
+        self.ax4.set_title('CO2 Emissions', fontsize=12, fontweight='bold')
+        self.ax4.set_ylabel('g/s')
+        self.ax4.grid(True, alpha=0.3)
+        
+        # 5. Average waiting time
+        self.ax5 = plt.subplot2grid((2, 3), (1, 1))
+        self.ax5.set_title('Average Waiting Time', fontsize=12, fontweight='bold')
+        self.ax5.set_ylabel('Vehicles Waiting')
+        self.ax5.grid(True, alpha=0.3)
+        
+        # 6. Traffic Light States
+        self.ax6 = plt.subplot2grid((2, 3), (1, 2))
+        self.ax6.set_title('Traffic Light States', fontsize=12, fontweight='bold')
+        self.ax6.set_ylabel('Active Green Lights')
+        
+        plt.tight_layout()
+        
+        # Add control buttons
+        ax_start = plt.axes([0.7, 0.02, 0.1, 0.04])
+        ax_stop = plt.axes([0.81, 0.02, 0.1, 0.04])
+        
+        self.btn_start = Button(ax_start, 'Start')
+        self.btn_stop = Button(ax_stop, 'Stop')
+        
+        self.btn_start.on_clicked(self.start_simulation)
+        self.btn_stop.on_clicked(self.stop_simulation)
+        
+    def start_simulation(self, event=None):
+        if not self.simulation_running:
+            self.simulation_running = True
+            self.start_sumo()
+            
+    def stop_simulation(self, event=None):
+        self.simulation_running = False
+        try:
+            traci.close()
+        except:
+            pass
+        print("Simulation stopped.")
+        
+    def start_sumo(self):
+        sumo_binary = os.path.join(os.environ['SUMO_HOME'], 'bin', 'sumo-gui.exe')
+        config_file = "simulation.sumocfg"
+        
+        try:
+            traci.start([sumo_binary, "-c", config_file, "--start", "--delay", "200"])
+            print("SUMO simulation started successfully!")
+            print("8 vehicles active in 2x2 grid network")
+            
+            self.ani = animation.FuncAnimation(self.fig, self.update_plots, interval=200, blit=False, cache_frame_data=False)
+            plt.show()
+        except Exception as e:
+            print(f"Failed to start simulation: {e}")
+            self.simulation_running = False
+        
+    def update_plots(self, frame):
+        if not self.simulation_running:
+            return
+            
+        try:
+            traci.simulationStep()
+            self.step += 1
+            current_time = traci.simulation.getTime()
+            
+            # Collect data
+            self.collect_vehicle_data()
+            self.collect_simulation_stats(current_time)
+            
+            # Update all plots
+            self.update_speed_plot()
+            self.update_density_plot()
+            self.update_position_plot()
+            self.update_emissions_plot()
+            self.update_waiting_time_plot()
+            self.update_traffic_light_plot()
+            
+        except traci.exceptions.FatalTraCIError:
+            self.simulation_running = False
+            print("TraCI connection lost.")
+        except Exception as e:
+            print(f"Error in update: {e}")
+            self.simulation_running = False
+            
+    def collect_vehicle_data(self):
+        try:
+            current_time = traci.simulation.getTime()
+            vehicle_ids = traci.vehicle.getIDList()
+            
+            for veh_id in vehicle_ids:
+                if veh_id not in self.vehicle_data:
+                    self.vehicle_data[veh_id] = {
+                        'speed': [], 'position': [], 'time': [], 
+                        'co2': [], 'type': traci.vehicle.getTypeID(veh_id),
+                        'waiting_time': []
+                    }
+                
+                speed = traci.vehicle.getSpeed(veh_id)
+                position = traci.vehicle.getPosition(veh_id)
+                co2 = traci.vehicle.getCO2Emission(veh_id)
+                waiting = 1 if speed < 0.1 else 0
+                
+                self.vehicle_data[veh_id]['speed'].append(speed)
+                self.vehicle_data[veh_id]['position'].append(position)
+                self.vehicle_data[veh_id]['time'].append(current_time)
+                self.vehicle_data[veh_id]['co2'].append(co2)
+                self.vehicle_data[veh_id]['waiting_time'].append(waiting)
+        except Exception as e:
+            print(f"Error collecting vehicle data: {e}")
+            
+    def collect_simulation_stats(self, current_time):
+        try:
+            vehicle_count = len(traci.vehicle.getIDList())
+            total_co2 = sum([traci.vehicle.getCO2Emission(veh) for veh in traci.vehicle.getIDList()]) if vehicle_count > 0 else 0
+            
+            self.simulation_data.append({
+                'time': current_time,
+                'vehicle_count': vehicle_count,
+                'total_co2': total_co2,
+                'step': self.step
+            })
+        except Exception as e:
+            print(f"Error collecting simulation stats: {e}")
+    
+    def update_speed_plot(self):
+        self.ax1.clear()
+        self.ax1.set_title('Vehicle Speed Distribution', fontsize=12, fontweight='bold')
+        self.ax1.set_xlabel('Speed (m/s)')
+        self.ax1.set_ylabel('Frequency')
+        self.ax1.grid(True, alpha=0.3)
+        
+        speeds = [data['speed'][-1] for data in self.vehicle_data.values() if data['speed']]
+        if speeds:
+            self.ax1.hist(speeds, bins=8, alpha=0.7, color='lightblue', edgecolor='navy')
+            
+    def update_density_plot(self):
+        self.ax2.clear()
+        self.ax2.set_title('Traffic Density Over Time', fontsize=12, fontweight='bold')
+        self.ax2.set_xlabel('Time (s)')
+        self.ax2.set_ylabel('Number of Vehicles')
+        self.ax2.grid(True, alpha=0.3)
+        
+        if self.simulation_data:
+            times = [data['time'] for data in self.simulation_data]
+            counts = [data['vehicle_count'] for data in self.simulation_data]
+            self.ax2.plot(times, counts, 'b-', linewidth=2)
+            
+    def update_position_plot(self):
+        self.ax3.clear()
+        self.ax3.set_title('Live Vehicle Positions', fontsize=12, fontweight='bold')
+        self.ax3.set_xlabel('X Position')
+        self.ax3.set_ylabel('Y Position')
+        self.ax3.grid(True, alpha=0.3)
+        
+        colors = plt.cm.tab10(np.linspace(0, 1, len(self.vehicle_data)))
+        
+        for i, (veh_id, data) in enumerate(self.vehicle_data.items()):
+            if data['position']:
+                x, y = data['position'][-1]
+                self.ax3.scatter(x, y, color=colors[i], s=100, label=veh_id, edgecolors='black')
+                
+        if self.vehicle_data:
+            self.ax3.legend(loc='upper right', fontsize=8)
+    
+    def update_emissions_plot(self):
+        self.ax4.clear()
+        self.ax4.set_title('CO2 Emissions', fontsize=12, fontweight='bold')
+        self.ax4.set_ylabel('g/s')
+        self.ax4.grid(True, alpha=0.3)
+        
+        if self.simulation_data:
+            times = [data['time'] for data in self.simulation_data]
+            co2 = [data['total_co2'] for data in self.simulation_data]
+            self.ax4.plot(times, co2, 'g-', linewidth=2)
+    
+    def update_waiting_time_plot(self):
+        self.ax5.clear()
+        self.ax5.set_title('Average Waiting Time', fontsize=12, fontweight='bold')
+        self.ax5.set_ylabel('Vehicles Waiting')
+        self.ax5.grid(True, alpha=0.3)
+        
+        if self.simulation_data:
+            times = [data['time'] for data in self.simulation_data]
+            waiting_times = [sum(1 for veh_data in self.vehicle_data.values() 
+                               if veh_data['waiting_time'] and veh_data['waiting_time'][-1] == 1) 
+                           for _ in self.simulation_data]
+            self.ax5.plot(times, waiting_times, 'orange', linewidth=2)
+    
+    def update_traffic_light_plot(self):
+        self.ax6.clear()
+        self.ax6.set_title('Traffic Light States', fontsize=12, fontweight='bold')
+        self.ax6.set_ylabel('Active Green Lights')
+        
+        try:
+            tl_ids = traci.trafficlight.getIDList()
+            green_counts = []
+            
+            for tl_id in tl_ids:
+                state = traci.trafficlight.getRedYellowGreenState(tl_id)
+                green_counts.append(state.count('G'))
+            
+            if green_counts:
+                bars = self.ax6.bar(range(len(green_counts)), green_counts, 
+                                   color=['green' if x > 0 else 'red' for x in green_counts],
+                                   alpha=0.7)
+                for i, (bar, count) in enumerate(zip(bars, green_counts)):
+                    self.ax6.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.1, 
+                                 str(count), ha='center', va='bottom')
+        except:
+            pass
+
+def main():
+    print("SUMO Simulation Controller")
+    print("==========================")
+    print("Network edges: A0A1, A0B0, A1A0, A1B1, B0A0, B0B1, B1A1, B1B0")
+    print("Features:")
+    print("- 8 vehicles with different types")
+    print("- 2x2 grid network with automatic traffic lights")
+    print("- Real-time data visualization")
+    print("- Multiple analytics plots")
+    print("- 200ms simulation delay")
+    
+    controller = SUMOSimulationController()
+    plt.show()
+
+if __name__ == "__main__":
+    main()
+
+# ======= File: create_network.py =======
+import os
+import sys
+import subprocess
+import xml.etree.ElementTree as ET
+
+def create_network_file():
+    sumo_home = os.environ.get('SUMO_HOME', '')
+    if not sumo_home:
+        print("ERROR: SUMO_HOME environment variable not set!")
+        return
+    
+    netgenerate_path = os.path.join(sumo_home, 'bin', 'netgenerate.exe')
+    
+    # Create a simple but effective network
+    command = [
+        netgenerate_path,
+        '--grid',
+        '--grid.number', '3',  # 3x3 grid for good complexity
+        '--grid.length', '200',
+        '--default.lanenumber', '2',
+        '--tls.guess', 'true',
+        '--output-file', 'network.net.xml'
+    ]
+    
+    try:
+        print("🛣️  Generating road network...")
+        subprocess.run(command, check=True, capture_output=True)
+        print("✅ Network generated successfully: network.net.xml")
+        
+        # Now discover the actual network elements
+        discover_network_elements()
+        
+    except subprocess.CalledProcessError as e:
+        print(f"❌ Error generating network: {e}")
+        if e.stderr:
+            print(f"STDERR: {e.stderr.decode()}")
+
+def discover_network_elements():
+    """Discover all network elements to create proper configuration"""
+    print("\n🔍 Discovering Network Elements...")
+    
+    try:
+        # Parse the generated network file
+        tree = ET.parse('network.net.xml')
+        root = tree.getroot()
+        
+        print("\n📋 NETWORK DISCOVERY REPORT:")
+        print("="*50)
+        
+        # Discover edges
+        edges = root.findall('.//edge')
+        print(f"\n🛣️  EDGES FOUND ({len(edges)}):")
+        edge_ids = []
+        for edge in edges:
+            edge_id = edge.get('id')
+            if edge_id and not edge_id.startswith(':'):  # Skip internal edges
+                edge_ids.append(edge_id)
+                print(f"   • {edge_id}")
+        
+        # Discover lanes for each edge
+        print(f"\n🚗 LANES FOUND:")
+        lane_data = {}
+        for edge in edges:
+            edge_id = edge.get('id')
+            if edge_id and not edge_id.startswith(':'):
+                lanes = edge.findall('.//lane')
+                lane_ids = [lane.get('id') for lane in lanes if lane.get('id')]
+                lane_data[edge_id] = lane_ids
+                if lane_ids:
+                    print(f"   • {edge_id}: {', '.join(lane_ids)}")
+        
+        # Discover traffic lights
+        tls = root.findall('.//tlLogic')
+        print(f"\n🚦 TRAFFIC LIGHTS FOUND ({len(tls)}):")
+        for tl in tls:
+            tl_id = tl.get('id')
+            print(f"   • {tl_id}")
+        
+        # Discover junctions
+        junctions = root.findall('.//junction')
+        print(f"\n📍 JUNCTIONS FOUND ({len(junctions)}):")
+        junction_ids = []
+        for junction in junctions:
+            j_id = junction.get('id')
+            j_type = junction.get('type')
+            if j_type != 'internal':
+                junction_ids.append(j_id)
+                print(f"   • {j_id} (type: {j_type})")
+        
+        # Save discovery results to file
+        save_discovery_results(edge_ids, lane_data, junction_ids, tls)
+        
+        print(f"\n✅ Discovery complete! Check 'network_discovery.txt' for details.")
+        
+    except Exception as e:
+        print(f"❌ Error during network discovery: {e}")
+
+def save_discovery_results(edge_ids, lane_data, junction_ids, tls):
+    """Save discovered network elements to a file"""
+    with open('network_discovery.txt', 'w') as f:
+        f.write("SUMO NETWORK DISCOVERY REPORT\n")
+        f.write("="*50 + "\n\n")
+        
+        f.write("EDGES:\n")
+        f.write("-" * 20 + "\n")
+        for edge_id in edge_ids:
+            f.write(f"{edge_id}\n")
+        
+        f.write("\nLANES:\n")
+        f.write("-" * 20 + "\n")
+        for edge_id, lanes in lane_data.items():
+            f.write(f"{edge_id}:\n")
+            for lane in lanes:
+                f.write(f"  - {lane}\n")
+        
+        f.write("\nTRAFFIC LIGHTS:\n")
+        f.write("-" * 20 + "\n")
+        for tl in tls:
+            f.write(f"{tl.get('id')}\n")
+        
+        f.write("\nJUNCTIONS:\n")
+        f.write("-" * 20 + "\n")
+        for junction in junction_ids:
+            f.write(f"{junction}\n")
+        
+        f.write("\nUSAGE EXAMPLES:\n")
+        f.write("-" * 20 + "\n")
+        f.write("For routes.rou.xml:\n")
+        if edge_ids:
+            f.write(f'<route id="route1" edges="{edge_ids[0]} {edge_ids[1]} {edge_ids[2]}"/>\n\n')
+        
+        f.write("For additional files:\n")
+        if lane_data:
+            first_edge = list(lane_data.keys())[0]
+            if lane_data[first_edge]:
+                f.write(f'<inductionLoop id="detector1" lane="{lane_data[first_edge][0]}" pos="50"/>\n')
+
+def generate_simple_config():
+    """Generate a simple working configuration based on discovery"""
+    print("\n🛠️  Generating simple working configuration...")
+    
+    try:
+        # Read discovery results
+        with open('network_discovery.txt', 'r') as f:
+            content = f.read()
+        
+        # Extract edge IDs
+        edges_section = False
+        edge_ids = []
+        for line in content.split('\n'):
+            if line.strip() == "EDGES:":
+                edges_section = True
+                continue
+            elif line.strip().startswith("-") and edges_section:
+                edges_section = False
+                continue
+            elif edges_section and line.strip() and not line.startswith(" "):
+                edge_ids.append(line.strip())
+        
+        # Generate simple routes using discovered edges
+        if len(edge_ids) >= 4:
+            generate_simple_routes(edge_ids[:4])
+            generate_simple_additional()
+            generate_simple_config_file()
+            
+            print("✅ Simple configuration generated!")
+            print("   - routes.rou.xml (with valid edges)")
+            print("   - additional.add.xml (with valid lanes)")
+            print("   - simulation.sumocfg")
+        else:
+            print("❌ Not enough edges discovered for route generation")
+            
+    except Exception as e:
+        print(f"❌ Error generating configuration: {e}")
+
+def generate_simple_routes(edge_ids):
+    """Generate simple routes using discovered edges"""
+    routes_content = f'''<?xml version="1.0" encoding="UTF-8"?>
+<routes>
+    <vType id="car" accel="2.6" decel="4.5" sigma="0.5" length="4.3" minGap="2.5" maxSpeed="55" color="1,0,0"/>
+    <vType id="suv" accel="2.3" decel="4.0" sigma="0.5" length="5.0" minGap="3.0" maxSpeed="50" color="0,1,0"/>
+    
+    <!-- Simple routes using discovered edges -->
+    <route id="route1" edges="{edge_ids[0]} {edge_ids[1]}"/>
+    <route id="route2" edges="{edge_ids[1]} {edge_ids[2]}"/>
+    <route id="route3" edges="{edge_ids[2]} {edge_ids[3]}"/>
+    <route id="route4" edges="{edge_ids[3]} {edge_ids[0]}"/>
+    
+    <!-- 8 vehicles -->
+    <vehicle id="veh0" type="car" route="route1" depart="0"/>
+    <vehicle id="veh1" type="suv" route="route2" depart="2"/>
+    <vehicle id="veh2" type="car" route="route3" depart="4"/>
+    <vehicle id="veh3" type="suv" route="route4" depart="6"/>
+    <vehicle id="veh4" type="car" route="route1" depart="8"/>
+    <vehicle id="veh5" type="suv" route="route2" depart="10"/>
+    <vehicle id="veh6" type="car" route="route3" depart="12"/>
+    <vehicle id="veh7" type="suv" route="route4" depart="14"/>
+</routes>'''
+    
+    with open('routes.rou.xml', 'w') as f:
+        f.write(routes_content)
+
+def generate_simple_additional():
+    """Generate simple additional file without specific lane references"""
+    additional_content = '''<?xml version="1.0" encoding="UTF-8"?>
+<additional>
+    <!-- Simple RSU points without lane dependencies -->
+    <poi id="rsu_central" type="rsu" color="0,1,0" x="300" y="300" width="10"/>
+    <poi id="rsu_north" type="rsu" color="0,1,0" x="300" y="500" width="10"/>
+    <poi id="rsu_south" type="rsu" color="0,1,0" x="300" y="100" width="10"/>
+    
+    <!-- Traffic light visualization -->
+    <tlLogic id="cluster_0" type="static" programID="0" offset="0">
+        <phase duration="31" state="GGGrrrGGGrrr"/>
+        <phase duration="6" state="yyyrrryyyrrr"/>
+        <phase duration="31" state="rrrGGGrrrGGG"/>
+        <phase duration="6" state="rrryyyrrryyy"/>
+    </tlLogic>
+</additional>'''
+    
+    with open('additional.add.xml', 'w') as f:
+        f.write(additional_content)
+
+def generate_simple_config_file():
+    """Generate simulation configuration file"""
+    config_content = '''<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <input>
+        <net-file value="network.net.xml"/>
+        <route-files value="routes.rou.xml"/>
+        <additional-files value="additional.add.xml"/>
+    </input>
+    
+    <time>
+        <begin value="0"/>
+        <end value="1000"/>
+    </time>
+    
+    <processing>
+        <step-length value="0.2"/>
+    </processing>
+    
+    <report>
+        <no-step-log value="true"/>
+    </report>
+    
+    <gui_only>
+        <start value="true"/>
+        <delay value="200"/>
+    </gui_only>
+</configuration>'''
+    
+    with open('simulation.sumocfg', 'w') as f:
+        f.write(config_content)
+
+if __name__ == "__main__":
+    print("🚦 SUMO Network Generator & Discovery Tool")
+    print("="*50)
+    create_network_file()
+    
+    # Ask if user wants to generate simple config
+    response = input("\nGenerate simple working configuration? (y/n): ")
+    if response.lower() == 'y':
+        generate_simple_config()
+        print("\n🎉 Setup complete! You can now run the simulation.")
+        print("   Run: python test_simulation.py")
+    else:
+        print("\n📋 Check 'network_discovery.txt' for network details.")
+        print("   Create your configuration files using the discovered elements.")
+
+# ======= File: network_discovery.txt =======
+SUMO NETWORK DISCOVERY REPORT
+==================================================
+
+EDGES:
+--------------------
+A0A1
+A0B0
+A1A0
+A1A2
+A1B1
+A2A1
+A2B2
+B0A0
+B0B1
+B0C0
+B1A1
+B1B0
+B1B2
+B1C1
+B2A2
+B2B1
+B2C2
+C0B0
+C0C1
+C1B1
+C1C0
+C1C2
+C2B2
+C2C1
+
+LANES:
+--------------------
+A0A1:
+  - A0A1_0
+  - A0A1_1
+A0B0:
+  - A0B0_0
+  - A0B0_1
+A1A0:
+  - A1A0_0
+  - A1A0_1
+A1A2:
+  - A1A2_0
+  - A1A2_1
+A1B1:
+  - A1B1_0
+  - A1B1_1
+A2A1:
+  - A2A1_0
+  - A2A1_1
+A2B2:
+  - A2B2_0
+  - A2B2_1
+B0A0:
+  - B0A0_0
+  - B0A0_1
+B0B1:
+  - B0B1_0
+  - B0B1_1
+B0C0:
+  - B0C0_0
+  - B0C0_1
+B1A1:
+  - B1A1_0
+  - B1A1_1
+B1B0:
+  - B1B0_0
+  - B1B0_1
+B1B2:
+  - B1B2_0
+  - B1B2_1
+B1C1:
+  - B1C1_0
+  - B1C1_1
+B2A2:
+  - B2A2_0
+  - B2A2_1
+B2B1:
+  - B2B1_0
+  - B2B1_1
+B2C2:
+  - B2C2_0
+  - B2C2_1
+C0B0:
+  - C0B0_0
+  - C0B0_1
+C0C1:
+  - C0C1_0
+  - C0C1_1
+C1B1:
+  - C1B1_0
+  - C1B1_1
+C1C0:
+  - C1C0_0
+  - C1C0_1
+C1C2:
+  - C1C2_0
+  - C1C2_1
+C2B2:
+  - C2B2_0
+  - C2B2_1
+C2C1:
+  - C2C1_0
+  - C2C1_1
+
+TRAFFIC LIGHTS:
+--------------------
+A1
+B0
+B1
+B2
+C1
+
+JUNCTIONS:
+--------------------
+A0
+A1
+A2
+B0
+B1
+B2
+C0
+C1
+C2
+
+USAGE EXAMPLES:
+--------------------
+For routes.rou.xml:
+<route id="route1" edges="A0A1 A0B0 A1A0"/>
+
+For additional files:
+<inductionLoop id="detector1" lane="A0A1_0" pos="50"/>
+
+
+# ======= File: rdr.py =======
+import os
+
+# Folder containing your code files
+folder_path = r"D:\4th yr assignments\v2x_simul"  # change this to your folder
+output_file = os.path.join(folder_path, "all_code.txt")
+
+# File extensions to include
+extensions = [".py", ".txt"]  # add more if needed
+
+with open(output_file, "w", encoding="utf-8") as outfile:
+    for filename in os.listdir(folder_path):
+        if any(filename.endswith(ext) for ext in extensions):
+            file_path = os.path.join(folder_path, filename)
+            outfile.write(f"# ======= File: {filename} =======\n")
+            with open(file_path, "r", encoding="utf-8") as infile:
+                outfile.write(infile.read())
+            outfile.write("\n\n")
+
+print(f"All code consolidated into {output_file}")
+
+
+# ======= File: reqr.txt =======
+# Packaging tools
+setuptools>=68.0
+wheel>=0.37
+pip>=23.0
+
+# Core numeric / data packages
+numpy>=2.0                  # for Python 3.13 support. :contentReference[oaicite:0]{index=0}
+pandas>=2.2                 
+
+# Other libraries (minimum version only, not strictly pinned)
+matplotlib>=3.7
+opencv-python>=4.7
+PySimpleGUI>=5.0             # major version bump because older 4.x may not install. :contentReference[oaicite:1]{index=1}
+traci>=1.18
+kiwisolver>=1.4
+cycler>=0.11
+fonttools>=4.38
+pillow>=9.4
+python-dateutil>=2.8
+pytz>=2022.7
+six>=1.16
+contourpy>=1.0.7
+packaging>=23.0
+pyparsing>=3.0.9
+
+
+# ======= File: requirements_frozen.txt =======

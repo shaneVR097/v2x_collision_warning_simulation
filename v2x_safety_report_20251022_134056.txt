@@ -1,0 +1,43 @@
+V2X TRAFFIC MANAGEMENT WITH ACCIDENT PREVENTION - SIMULATION REPORT
+======================================================================
+Simulation Date: 2025-10-22 13:40:56
+======================================================================
+
+SIMULATION PARAMETERS:
+----------------------------------------
+• Planned Duration: 150 seconds
+• Actual Duration: 30.0 seconds
+• Simulation Steps: 150
+• RSUs Deployed: 5
+
+PERFORMANCE METRICS:
+----------------------------------------
+• Total Vehicles Tracked: 12
+• Average Speed: 10.34 m/s (37.2 km/h)
+• Maximum Speed: 14.58 m/s
+• Minimum Speed: 2.40 m/s
+
+V2X SAFETY PERFORMANCE:
+----------------------------------------
+• Near Misses Detected: 215
+• Accidents Prevented: 19
+• V2X Safety Interventions: 19
+• V2X Warnings Issued: 19
+
+V2X COMMUNICATION:
+----------------------------------------
+• RSU Messages: 32
+• Vehicle-to-Vehicle Events: 33
+• Traffic Sign Updates: 45
+
+SYSTEM PERFORMANCE SCORES:
+----------------------------------------
+• Safety Score: 100.0%
+• Traffic Efficiency: 68.9%
+• V2X Intervention Score: 73.1%
+• OVERALL SYSTEM SCORE: 85.3%
+
+V2X EFFECTIVENESS:
+----------------------------------------
+• Accident Prevention Rate: 8.1%
+• Safety Interventions per Vehicle: 1.6
