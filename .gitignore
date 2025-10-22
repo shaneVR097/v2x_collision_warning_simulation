@@ -1,0 +1,30 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# SUMO generated files
+*.net.xml
+*.rou.xml
+*.sumocfg
+*.add.xml
+
+# Output files
+v2x_safety_report_*.txt
+v2x_simulation_report_*.txt
+emissions.xml
+v2x_traces.xml
+*.mp4
+*.png
+Figure_*.png
+
+# IDE
+.vscode/
+.idea/
+
+# System
+.DS_Store
+Thumbs.db
+network_discovery.txt
